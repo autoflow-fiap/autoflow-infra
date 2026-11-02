@@ -28,8 +28,11 @@ flowchart LR
 ```
 
 Os diagramas C4, sequências de autenticação e implantação estão em [arquitetura e fluxos](docs/api-gateway/arquitetura.md).
-As decisões e procedimentos estão no [ADR-001](docs/api-gateway/adr-001-api-gateway.md), [RFC](docs/api-gateway/rfc-api-gateway.md)
-e [runbooks](docs/api-gateway/runbook.md).
+As decisões e procedimentos estão no [ADR-001 — API Gateway](docs/api-gateway/adr-001-api-gateway.md),
+[RFC-001 — API Gateway](docs/api-gateway/rfc-api-gateway.md) e [runbook](docs/api-gateway/runbook.md).
+Para observabilidade, consulte o [ADR-002 — New Relic](docs/newrelic/adr-002-new-relic-observabilidade.md),
+a [RFC-002 — New Relic](docs/newrelic/rfc-002-new-relic-observabilidade.md) e o
+[README do root Terraform New Relic](infra/newrelic/README.md).
 
 ## CI/CD e ambientes
 
