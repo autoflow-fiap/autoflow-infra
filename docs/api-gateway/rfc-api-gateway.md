@@ -89,6 +89,18 @@ Comparação retrospectiva. O histórico registra a arquitetura anterior com Kon
 | Kong Gateway OSS | Customização por plugins e controle da camada de gateway dentro do cluster. | Operar e atualizar a camada no EKS, administrar ingress/plugins e incluir o cluster na disponibilidade da borda pública. | Kong aparece no histórico como arquitetura anterior; a decisão atual move a entrada para serviço AWS gerenciado. Nenhum benchmark de migração foi registrado. |
 | ALB público direto | Reduz serviços intermediários e pode encaminhar diretamente a target groups. | Expõe o balanceador e não fornece o contrato Lambda de login; políticas de entrada, throttling e logs seriam distribuídos. | Não mantém a entrada gerenciada unificada nem o isolamento do ALB. |
 
+### Alternativas de validação do JWT
+
+A plataforma de entrada e a localização da validação de JWT são decisões diferentes. A configuração atual não define authorizer na HTTP API: as rotas encaminham Bearer token ao backend, que verifica assinatura/expiração e consulta o usuário, perfil e estado. O detalhe da emissão e do contrato está na [RFC de autenticação serverless](../../../autoflow-lambda/docs/rfc/RFC-001-autenticacao-serverless-jwt.md).
+
+| Opção | Mecanismo | Trade-off no contrato atual |
+|---|---|---|
+| Validação no backend (atual) | Spring Security valida o JWT na integração privada e aplica a autorização após recarregar o estado atual do usuário. | Evita nova invocação de authorizer e mantém um único ponto de autorização de domínio; token inválido ainda chega ao backend privado e consome seu processamento. |
+| JWT Authorizer nativo da HTTP API | Valida assinatura/claims com issuer e JWKS configurados antes de encaminhar a rota. | O token existente usa HS256 e não declara `iss`/`aud`; adoção demanda mudança compatível do token. Não consulta o banco e não substitui a autorização do backend. |
+| Lambda Authorizer `REQUEST` | Executa lógica customizada, podendo verificar HS256 com acesso controlado ao segredo. | Adiciona código, permissão, invocação/cache e gestão de segredo; duplica a validação criptográfica e não decide o perfil/status atual. Não está declarado no root vigente. |
+
+Não há benchmark de latência/custo para essas opções. Nenhuma alternativa de authorizer deve ser considerada implementada por existir uma Lambda de login.
+
 ## 4. Impactos e Riscos
 
 **Sistemas afetados:** frontend/URLs same-origin, Lambda, API Gateway, VPC/EKS, SGs, ALB, target groups, Services/NodePorts, RDS e workflows Terraform.

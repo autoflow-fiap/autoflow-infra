@@ -17,6 +17,8 @@ Adotar Amazon API Gateway HTTP API v2 como entrada pública declarada do AutoFlo
 
 A Lambda e o backend conectam ao RDS privado. A Lambda autentica CPF/CNPJ e senha e emite JWT HS256. O Spring Boot valida assinatura/expiração e consulta usuário, perfil e estado para autorização; claims do token não substituem a política de domínio. A decisão mantém a autenticação de entrada desacoplada do acesso às funções de negócio.
 
+Não há authorizer JWT configurado na HTTP API atual. O token HS256 segue à aplicação e o backend o valida e reconsulta o usuário/estado. Um authorizer nativo exigiria compatibilidade de issuer/JWKS/claims com o token; um Lambda Authorizer aceitaria validação customizada, mas acrescentaria invocação, distribuição de segredo e duplicação de verificação. Qualquer mudança de validação no gateway é decisão separada e não substitui a autorização de domínio no backend.
+
 ## Alternativas consideradas
 
 A comparação abaixo é retrospectiva. O histórico registra a mudança de gateway, mas não contém avaliação quantitativa de custos, latência ou benchmark formal entre alternativas.
@@ -27,6 +29,7 @@ A comparação abaixo é retrospectiva. O histórico registra a mudança de gate
 | API Gateway REST API | Mais opções de configuração e extensões de API Management para cenários que precisem desses recursos. | Maior superfície de configuração e potencial aumento de custo/complexidade; não há necessidade versionada que justifique essa camada adicional. | HTTP API cobre os contratos e integrações declarados; não há evidência de comparação ou benchmark formal. |
 | Kong Gateway OSS no EKS | Controle sobre plugins/configuração e independência parcial de recursos específicos de API Gateway. | Operar/atualizar gateway, ingress e plugins junto ao cluster; adicionar consumo e dependência do EKS à borda pública. | O Kong aparece como arquitetura anterior no histórico, mas não é o caminho declarado nesta configuração; não há registro de benchmark formal da troca. |
 | ALB público como entrada direta | Menos um serviço de gateway e integração direta com target groups. | Aumenta a superfície exposta do ALB e não oferece por si só o fluxo de login AWS_PROXY; exige tratar CORS, throttling e acesso de forma diferente. | Não preserva o objetivo de entrada gerenciada unificada com Lambda e ALB privado. |
+| JWT Authorizer nativo ou Lambda Authorizer na HTTP API | Rejeitar token inválido antes da integração backend; um Lambda Authorizer permite validação customizada de HS256. | O JWT atual não declara `iss`/`aud` e usa HS256; o authorizer nativo exigiria compatibilidade de token. O Lambda Authorizer adicionaria invocação, segredo e lógica duplicada. Ambos não carregam por si sós o perfil/status atual do banco. | Não faz parte da topologia declarada: a API encaminha as rotas e o backend valida JWT e autorização. Ver a [RFC de autenticação da Lambda](../../../autoflow-lambda/docs/rfc/RFC-001-autenticacao-serverless-jwt.md). |
 
 ## Consequências positivas
 
