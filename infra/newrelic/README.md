@@ -20,6 +20,73 @@ A aplicação emite `AutoFlowOrderCreated`, `AutoFlowOrderStageCompleted`, `Auto
 `AutoFlowIntegrationFailure`, todos com o atributo `environment`. Os logs JSON incluem `request.id` e, quando disponíveis,
 `trace.id`/`span.id`.
 
+### Coleta e parsing dos logs do backend
+
+O `newrelic-logging` permanece em `lowDataMode` e coleta os arquivos stdout dos containers no namespace configurado. O filtro
+customizado habilita `Merge_Log` para interpretar cada linha JSON antes da allowlist. São preservados somente os campos de
+correlação/diagnóstico (`service.name`, `deployment.environment`, `request.id`, `trace.id`, `span.id`, timestamp, nível,
+logger, mensagem e tipo da exceção) e os metadados Kubernetes necessários. Labels e annotations continuam desabilitados;
+campos arbitrários, incluindo nomes associados a dados sensíveis, não são adicionados à allowlist. A allowlist não substitui
+a sanitização da aplicação: mensagens e exceções devem continuar sem CPF/CNPJ, JWT, Authorization, senhas ou conteúdo de
+requisição.
+
+O Java APM mantém `NEW_RELIC_APPLICATION_LOGGING_ENABLED=true` e decoração local habilitada, mas
+`NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED=false`. O único encaminhador é o Fluent Bit do `nri-bundle`; não habilite
+forwarding paralelo no agente.
+
+### Configuração esperada em homologação
+
+- `ENABLE_NEWRELIC_KUBERNETES=true` no Environment `homolog`, com namespace `default`; a seleção efetiva é validada pelo
+  Plan aprovado. O namespace das workloads deve coincidir com `newrelic_namespace`.
+- O Secret existente `newrelic-license`, chave `licenseKey`, é referenciado pelo chart e pelo backend sem ler ou alterar seu
+  conteúdo. A License Key é usada para ingestão; `NEW_RELIC_API_KEY` é uma User API key separada, usada pelo provider
+  Terraform e não deve ser configurada no container.
+- O ConfigMap `autoflow-config` fornece `SPRING_APPLICATION_NAME=autoflow-backend` e
+  `DEPLOYMENT_ENVIRONMENT=homolog`. O backend grava JSON no stdout; não é necessário montar arquivo de log.
+- Não definir exclusões adicionais de namespace/container que atinjam `default` ou `autoflow-backend`. A regra versionada
+  limita a coleta ao namespace selecionado.
+
+### Validação pós-aplicação no New Relic
+
+Após o Apply autorizado do root New Relic e o rollout saudável do Fluent Bit (não executados nesta investigação), aguarde
+alguns minutos e valide primeiro a ingestão sem retornar conteúdo de mensagens. Não é necessário republicar o backend se os
+pods atuais já estiverem emitindo logs no stdout:
+
+```nrql
+SELECT count(*) FROM Log SINCE 1 hour ago
+```
+
+Confira os nomes reais de atributos sem inspecionar valores:
+
+```nrql
+SELECT keyset() FROM Log SINCE 1 hour ago
+```
+
+Depois valide os campos estruturados do backend:
+
+```nrql
+SELECT count(*) FROM Log
+WHERE service.name = 'autoflow-backend'
+  AND deployment.environment = 'homolog'
+SINCE 1 hour ago
+```
+
+Confirme os metadados de pod/container com os nomes de atributo mostrados pelo `keyset()`; o formato pode variar com a versão
+do coletor. Por fim, confira a correlação sem consultar mensagens não redigidas:
+
+```nrql
+SELECT timestamp, level, request.id, trace.id, span.id FROM Log
+WHERE service.name = 'autoflow-backend'
+  AND deployment.environment = 'homolog'
+SINCE 1 hour ago LIMIT 20
+```
+
+`request.id` deve acompanhar os logs emitidos durante uma requisição; `trace.id`/`span.id` podem estar ausentes quando não há
+transação APM associada. O widget versionado também inclui `message`; inspecione-o somente em eventos conhecidos e já
+sanitizados. Se a primeira consulta tiver dados, mas as consultas por serviço não, use `keyset()` para diagnosticar parsing
+ou nomes divergentes antes de alterar o NRQL do dashboard. Se a primeira consulta continuar sem logs do backend, verifique
+namespace, configuração renderizada do Fluent Bit e erros do output plugin; não habilite um segundo forwarder.
+
 ## State e providers
 
 - Backend S3 independente: bucket e key exclusivos fornecidos por Variables do GitHub Environment selecionado. A key deve começar com `homolog/` ou `production/`; seu sufixo é definido externamente e não é fixado neste root.
